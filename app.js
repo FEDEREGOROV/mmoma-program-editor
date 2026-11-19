@@ -49,6 +49,12 @@ const EXPORT_CSS = `.mmoma-program {
   font-size: 17px;
 }
 
+.mmoma-program ul,
+.mmoma-program ol {
+  margin: 0 0 18px;
+  padding-left: 24px;
+}
+
 .mmoma-program a {
   color: inherit;
   text-decoration: underline;
@@ -112,6 +118,12 @@ const EXPORT_CSS = `.mmoma-program {
 .mmoma-content p {
   font-size: 16px;
   margin: 0;
+}
+
+.mmoma-content ul,
+.mmoma-content ol {
+  margin: 10px 0 0;
+  font-size: 16px;
 }
 
 .mmoma-button,
@@ -263,6 +275,7 @@ const DEFAULT_DATA = {
 let state = loadState();
 let saveTimer = null;
 let toastTimer = null;
+let pendingLink = null;
 
 const elements = {
   saveStatus: document.querySelector("#saveStatus"),
@@ -271,8 +284,47 @@ const elements = {
   previewStage: document.querySelector("#previewStage"),
   codeOutput: document.querySelector("#codeOutput"),
   importInput: document.querySelector("#importInput"),
-  toast: document.querySelector("#toast")
+  toast: document.querySelector("#toast"),
+  linkDialog: document.querySelector("#linkDialog"),
+  linkUrlInput: document.querySelector("#linkUrlInput")
 };
+
+function openLinkDialog(editor, range, sync) {
+  pendingLink = { editor, range: range.cloneRange(), sync };
+  elements.linkUrlInput.value = "https://";
+  elements.linkDialog.hidden = false;
+  window.requestAnimationFrame(() => {
+    elements.linkUrlInput.focus();
+    elements.linkUrlInput.setSelectionRange(8, 8);
+  });
+}
+
+function closeLinkDialog() {
+  elements.linkDialog.hidden = true;
+  pendingLink = null;
+}
+
+function applyPendingLink() {
+  if (!pendingLink) return;
+  let href = elements.linkUrlInput.value.trim();
+  if (href && !/^https?:\/\//i.test(href)) href = `https://${href}`;
+  if (!isSafeUrl(href)) {
+    elements.linkUrlInput.focus();
+    elements.linkUrlInput.setCustomValidity("Введите корректную ссылку");
+    elements.linkUrlInput.reportValidity();
+    return;
+  }
+
+  elements.linkUrlInput.setCustomValidity("");
+  const selection = window.getSelection();
+  pendingLink.editor.focus();
+  selection.removeAllRanges();
+  selection.addRange(pendingLink.range);
+  document.execCommand("createLink", false, href);
+  pendingLink.sync();
+  closeLinkDialog();
+  showToast("Ссылка добавлена к выделенному тексту");
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -356,6 +408,167 @@ function renderParagraphs(value, indent = "") {
     .join("\n");
 }
 
+function containsHtml(value) {
+  return /<\/?(?:p|div|br|strong|b|em|i|u|ul|ol|li|a)\b/i.test(String(value || ""));
+}
+
+function sanitizeRichHtml(value) {
+  const parser = new DOMParser();
+  const source = parser.parseFromString(`<div>${String(value || "")}</div>`, "text/html").body.firstElementChild;
+  const output = document.createElement("div");
+  const allowedTags = new Set(["P", "BR", "STRONG", "B", "EM", "I", "U", "UL", "OL", "LI", "A"]);
+
+  function cleanNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent || "");
+    if (node.nodeType !== Node.ELEMENT_NODE) return document.createDocumentFragment();
+
+    const sourceTag = node.tagName.toUpperCase();
+    const tag = sourceTag === "DIV" ? "P" : sourceTag;
+    if (!allowedTags.has(tag)) {
+      const fragment = document.createDocumentFragment();
+      [...node.childNodes].forEach(child => fragment.append(cleanNode(child)));
+      return fragment;
+    }
+
+    if (tag === "A") {
+      const href = node.getAttribute("href") || "";
+      if (!isSafeUrl(href)) {
+        const fragment = document.createDocumentFragment();
+        [...node.childNodes].forEach(child => fragment.append(cleanNode(child)));
+        return fragment;
+      }
+    }
+
+    const clean = document.createElement(tag.toLowerCase());
+    if (tag === "A") {
+      clean.setAttribute("href", node.getAttribute("href"));
+      clean.setAttribute("target", "_blank");
+      clean.setAttribute("rel", "noopener noreferrer");
+    }
+    [...node.childNodes].forEach(child => clean.append(cleanNode(child)));
+    return clean;
+  }
+
+  [...source.childNodes].forEach(node => output.append(cleanNode(node)));
+  return output.innerHTML
+    .replace(/<p><br><\/p>/g, "")
+    .replace(/(?:<br>){3,}/g, "<br><br>")
+    .trim();
+}
+
+function toEditorHtml(value) {
+  if (!value) return "";
+  return containsHtml(value) ? sanitizeRichHtml(value) : renderParagraphs(value);
+}
+
+function renderRichText(value, indent = "") {
+  const html = toEditorHtml(value);
+  if (!html) return "";
+  return html.split("\n").map(line => `${indent}${line}`).join("\n");
+}
+
+function initializeRichEditor(editor, getValue, setValue) {
+  const shell = editor.closest(".rich-editor-shell");
+  const toolbar = shell.querySelector(".rich-toolbar");
+  let savedRange = null;
+
+  if (!toolbar.childElementCount) {
+    toolbar.append(document.querySelector("#richToolbarTemplate").content.cloneNode(true));
+  }
+
+  if (!editor.dataset.richReady) {
+    const rememberSelection = () => {
+      const selection = window.getSelection();
+      if (selection.rangeCount && editor.contains(selection.anchorNode)) {
+        savedRange = selection.getRangeAt(0).cloneRange();
+      }
+    };
+
+    const restoreSelection = () => {
+      editor.focus();
+      if (!savedRange) return false;
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(savedRange);
+      return true;
+    };
+
+    const sync = () => {
+      setValue(sanitizeRichHtml(editor.innerHTML));
+      refreshOutput();
+      rememberSelection();
+    };
+
+    const updateToolbar = () => {
+      toolbar.querySelectorAll("[data-command]").forEach(button => {
+        const command = button.dataset.command;
+        const supportsState = ["bold", "italic", "underline", "insertUnorderedList", "insertOrderedList"].includes(command);
+        button.classList.toggle("is-active", supportsState && document.queryCommandState(command));
+      });
+    };
+
+    editor.addEventListener("input", sync);
+    editor.addEventListener("keyup", () => {
+      rememberSelection();
+      updateToolbar();
+    });
+    editor.addEventListener("mouseup", () => {
+      rememberSelection();
+      updateToolbar();
+    });
+    editor.addEventListener("focus", rememberSelection);
+    editor.addEventListener("blur", () => {
+      const clean = sanitizeRichHtml(editor.innerHTML);
+      if (clean !== editor.innerHTML) editor.innerHTML = clean;
+      setValue(clean);
+    });
+    editor.addEventListener("paste", event => {
+      event.preventDefault();
+      const html = event.clipboardData.getData("text/html");
+      const text = event.clipboardData.getData("text/plain");
+      const content = html
+        ? sanitizeRichHtml(html)
+        : escapeHtml(text).replace(/\r?\n/g, "<br>");
+      document.execCommand("insertHTML", false, content);
+      sync();
+    });
+
+    toolbar.addEventListener("mousedown", event => {
+      if (event.target.closest("button")) {
+        rememberSelection();
+        event.preventDefault();
+      }
+    });
+
+    toolbar.addEventListener("click", event => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      restoreSelection();
+
+      if (button.dataset.action === "link") {
+        if (!savedRange || savedRange.collapsed) {
+          showToast("Сначала выделите текст для ссылки");
+          return;
+        }
+        openLinkDialog(editor, savedRange, sync);
+        return;
+      } else if (button.dataset.action === "clear") {
+        document.execCommand("removeFormat", false);
+        document.execCommand("unlink", false);
+      } else if (button.dataset.command) {
+        document.execCommand(button.dataset.command, false);
+      }
+
+      sync();
+      updateToolbar();
+    });
+
+    editor.dataset.richReady = "true";
+  }
+
+  if (document.activeElement !== editor) editor.innerHTML = toEditorHtml(getValue());
+}
+
 function renderDetails(value) {
   return String(value || "")
     .split("\n")
@@ -389,15 +602,15 @@ ${datesMarkup}
     </div>
     <div class="mmoma-content">
       <h3>${escapeHtml(event.title)}</h3>
-${renderParagraphs(event.description, "      ")}
+${renderRichText(event.description, "      ")}
     </div>
 ${button}
   </div>`;
 }
 
 function generateMarkup(data) {
-  const intro = renderParagraphs(data.introText, "    ");
-  const exhibition = renderParagraphs(data.exhibitionText, "  ");
+  const intro = renderRichText(data.introText, "    ");
+  const exhibition = renderRichText(data.exhibitionText, "  ");
   const details = renderDetails(data.exhibitionDetails);
   const sections = data.sections.map(section => `  <section class="mmoma-program__events">
   <h2>${escapeHtml(section.title)}</h2>
@@ -528,18 +741,16 @@ function renderEventCard(event, eventIndex, section) {
   const dateStyle = card.querySelector(".date-style");
 
   titleInput.value = event.title;
-  descriptionInput.value = event.description;
   urlInput.value = event.url;
   labelInput.value = event.buttonLabel;
   dateStyle.value = event.dateStyle;
+  initializeRichEditor(descriptionInput, () => event.description, value => {
+    event.description = value;
+  });
 
   titleInput.addEventListener("input", () => {
     event.title = titleInput.value;
     name.textContent = event.title || "Без названия";
-    refreshOutput();
-  });
-  descriptionInput.addEventListener("input", () => {
-    event.description = descriptionInput.value;
     refreshOutput();
   });
   urlInput.addEventListener("input", () => {
@@ -631,6 +842,12 @@ function renderEditor() {
   document.querySelectorAll("[data-path]").forEach(input => {
     input.value = state[input.dataset.path] || "";
   });
+  document.querySelectorAll("[data-rich-path]").forEach(editor => {
+    const path = editor.dataset.richPath;
+    initializeRichEditor(editor, () => state[path], value => {
+      state[path] = value;
+    });
+  });
   elements.sectionsList.replaceChildren();
   state.sections.forEach((section, index) => elements.sectionsList.append(renderSectionCard(section, index)));
 }
@@ -716,6 +933,21 @@ document.querySelector("#copyButton").addEventListener("click", async () => {
     document.execCommand("copy");
   }
   showToast("HTML скопирован");
+});
+
+document.querySelector("#linkDialogApply").addEventListener("click", applyPendingLink);
+document.querySelector("#linkDialogCancel").addEventListener("click", closeLinkDialog);
+document.querySelector("#linkDialogClose").addEventListener("click", closeLinkDialog);
+elements.linkDialog.addEventListener("click", event => {
+  if (event.target === elements.linkDialog) closeLinkDialog();
+});
+elements.linkUrlInput.addEventListener("input", () => elements.linkUrlInput.setCustomValidity(""));
+elements.linkUrlInput.addEventListener("keydown", event => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    applyPendingLink();
+  }
+  if (event.key === "Escape") closeLinkDialog();
 });
 
 renderEditor();

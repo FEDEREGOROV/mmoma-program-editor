@@ -54,9 +54,12 @@
             </div>
 
             <div class="field">
-              <label for="introText">Вступительный текст</label>
-              <textarea id="introText" rows="5" data-path="introText" placeholder="Кратко расскажите о программе"></textarea>
-              <p class="field__hint">Разделяйте абзацы пустой строкой. Ссылка: <code>[текст](https://адрес.ru)</code></p>
+              <label id="introTextLabel">Вступительный текст</label>
+              <div class="rich-editor-shell">
+                <div class="rich-toolbar"></div>
+                <div class="rich-editor__content" id="introText" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="introTextLabel" data-rich-path="introText" data-placeholder="Кратко расскажите о программе"></div>
+              </div>
+              <p class="field__hint">Выделите текст и выберите форматирование или добавьте ссылку.</p>
             </div>
 
             <div class="divider"></div>
@@ -67,9 +70,12 @@
             </div>
 
             <div class="field">
-              <label for="exhibitionText">Описание выставки</label>
-              <textarea id="exhibitionText" rows="10" data-path="exhibitionText" placeholder="Описание выставки"></textarea>
-              <p class="field__hint">Каждый абзац отделяйте пустой строкой.</p>
+              <label id="exhibitionTextLabel">Описание выставки</label>
+              <div class="rich-editor-shell">
+                <div class="rich-toolbar"></div>
+                <div class="rich-editor__content rich-editor__content--large" id="exhibitionText" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="exhibitionTextLabel" data-rich-path="exhibitionText" data-placeholder="Описание выставки"></div>
+              </div>
+              <p class="field__hint">Можно использовать жирный текст, курсив, ссылки и списки.</p>
             </div>
 
             <div class="field">
@@ -120,6 +126,25 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <div class="link-dialog" id="linkDialog" hidden>
+    <div class="link-dialog__panel" role="dialog" aria-modal="true" aria-labelledby="linkDialogTitle">
+      <div class="link-dialog__header">
+        <div>
+          <p class="kicker">Ссылка</p>
+          <h2 id="linkDialogTitle">Добавить адрес</h2>
+        </div>
+        <button class="icon-button" id="linkDialogClose" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <label for="linkUrlInput">Адрес страницы</label>
+      <input id="linkUrlInput" type="url" inputmode="url" placeholder="https://example.com">
+      <p class="link-dialog__hint">Ссылка будет применена к выделенному тексту.</p>
+      <div class="link-dialog__actions">
+        <button class="button button--ghost" id="linkDialogCancel" type="button">Отмена</button>
+        <button class="button button--primary" id="linkDialogApply" type="button">Добавить ссылку</button>
+      </div>
+    </div>
+  </div>
+
   <template id="sectionTemplate">
     <article class="section-card">
       <div class="section-card__header">
@@ -158,8 +183,11 @@
         </div>
         <div class="field">
           <label>Описание</label>
-          <textarea class="event-description" rows="6" placeholder="Описание события"></textarea>
-          <p class="field__hint">Для нескольких абзацев оставьте пустую строку.</p>
+          <div class="rich-editor-shell">
+            <div class="rich-toolbar"></div>
+            <div class="rich-editor__content event-description" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Описание события"></div>
+          </div>
+          <p class="field__hint">Выделите фрагмент, чтобы сделать его жирным или добавить ссылку.</p>
         </div>
         <div class="field-row">
           <div class="field">
@@ -201,6 +229,23 @@
         <input class="date-time" type="text" placeholder="14:00–15:30">
       </div>
       <button class="icon-button delete-date" type="button" aria-label="Удалить дату" title="Удалить дату">×</button>
+    </div>
+  </template>
+
+  <template id="richToolbarTemplate">
+    <div class="rich-toolbar__group" role="group" aria-label="Форматирование текста">
+      <button class="rich-tool" type="button" data-command="bold" title="Жирный (⌘B)" aria-label="Жирный"><strong>Ж</strong></button>
+      <button class="rich-tool rich-tool--italic" type="button" data-command="italic" title="Курсив (⌘I)" aria-label="Курсив">К</button>
+      <button class="rich-tool rich-tool--underline" type="button" data-command="underline" title="Подчёркнутый (⌘U)" aria-label="Подчёркнутый">Ч</button>
+    </div>
+    <div class="rich-toolbar__group" role="group" aria-label="Списки">
+      <button class="rich-tool rich-tool--wide" type="button" data-command="insertUnorderedList" title="Маркированный список" aria-label="Маркированный список">• Список</button>
+      <button class="rich-tool rich-tool--wide" type="button" data-command="insertOrderedList" title="Нумерованный список" aria-label="Нумерованный список">1. Список</button>
+    </div>
+    <div class="rich-toolbar__group" role="group" aria-label="Ссылки и очистка">
+      <button class="rich-tool rich-tool--wide" type="button" data-action="link" title="Добавить ссылку к выделенному тексту" aria-label="Добавить ссылку">↗ Ссылка</button>
+      <button class="rich-tool" type="button" data-command="unlink" title="Удалить ссылку" aria-label="Удалить ссылку">×↗</button>
+      <button class="rich-tool" type="button" data-action="clear" title="Очистить форматирование" aria-label="Очистить форматирование">Tx</button>
     </div>
   </template>
 
