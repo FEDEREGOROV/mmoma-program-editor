@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Редактор программы ММОМА с предпросмотром и экспортом готового HTML">
+  <title>Редактор программы ММОМА</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true">M</span>
+        <div>
+          <div class="brand__eyebrow">HTML-конструктор</div>
+          <h1>Редактор программы</h1>
+        </div>
+      </div>
+
+      <div class="topbar__actions">
+        <span class="save-status" id="saveStatus" aria-live="polite">
+          <span class="save-status__dot"></span>
+          Сохранено
+        </span>
+        <button class="button button--ghost" id="importButton" type="button">Импорт JSON</button>
+        <button class="button button--ghost" id="backupButton" type="button">Скачать JSON</button>
+        <button class="button button--primary" id="downloadButton" type="button">Скачать HTML</button>
+        <input type="file" id="importInput" accept="application/json,.json" hidden>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="editor" aria-label="Редактор содержимого">
+        <div class="editor__header">
+          <div>
+            <p class="kicker">Содержимое</p>
+            <h2>Настройте страницу</h2>
+          </div>
+          <button class="text-button text-button--danger" id="resetButton" type="button">Вернуть пример</button>
+        </div>
+
+        <nav class="tabs" aria-label="Разделы редактора">
+          <button class="tab is-active" type="button" data-tab="intro">Вступление</button>
+          <button class="tab" type="button" data-tab="events">События</button>
+          <button class="tab" type="button" data-tab="code">Готовый код</button>
+        </nav>
+
+        <div class="editor__content">
+          <section class="tab-panel is-active" id="panel-intro" data-panel="intro">
+            <div class="field">
+              <label for="pageTitle">Заголовок программы</label>
+              <input id="pageTitle" type="text" data-path="pageTitle" placeholder="Программа ноября">
+            </div>
+
+            <div class="field">
+              <label for="introText">Вступительный текст</label>
+              <textarea id="introText" rows="5" data-path="introText" placeholder="Кратко расскажите о программе"></textarea>
+              <p class="field__hint">Разделяйте абзацы пустой строкой. Ссылка: <code>[текст](https://адрес.ru)</code></p>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="field">
+              <label for="exhibitionTitle">Заголовок выставки</label>
+              <input id="exhibitionTitle" type="text" data-path="exhibitionTitle" placeholder="Выставка «Название»">
+            </div>
+
+            <div class="field">
+              <label for="exhibitionText">Описание выставки</label>
+              <textarea id="exhibitionText" rows="10" data-path="exhibitionText" placeholder="Описание выставки"></textarea>
+              <p class="field__hint">Каждый абзац отделяйте пустой строкой.</p>
+            </div>
+
+            <div class="field">
+              <label for="exhibitionDetails">Короткие сведения</label>
+              <textarea id="exhibitionDetails" rows="6" data-path="exhibitionDetails" placeholder="Даты: с 1 по 30 ноября&#10;Место: адрес&#10;Возраст: 6+"></textarea>
+              <p class="field__hint">Одна строка — один пункт. Текст до двоеточия станет жирным.</p>
+            </div>
+          </section>
+
+          <section class="tab-panel" id="panel-events" data-panel="events">
+            <div id="sectionsList" class="sections-list"></div>
+            <button class="button button--add button--full" id="addSectionButton" type="button">
+              <span aria-hidden="true">+</span> Добавить раздел событий
+            </button>
+          </section>
+
+          <section class="tab-panel" id="panel-code" data-panel="code">
+            <div class="code-header">
+              <div>
+                <h3>HTML для вставки</h3>
+                <p>Включает стили и весь контент из предпросмотра.</p>
+              </div>
+              <button class="button button--ghost" id="copyButton" type="button">Копировать</button>
+            </div>
+            <textarea class="code-output" id="codeOutput" readonly spellcheck="false" aria-label="Готовый HTML-код"></textarea>
+          </section>
+        </div>
+      </section>
+
+      <section class="preview" aria-label="Предпросмотр страницы">
+        <div class="preview__bar">
+          <div>
+            <p class="kicker">Предпросмотр</p>
+            <span class="preview__note">Обновляется автоматически</span>
+          </div>
+          <div class="viewport-switcher" aria-label="Размер предпросмотра">
+            <button class="viewport-button is-active" type="button" data-width="desktop" aria-label="Широкий экран">Широко</button>
+            <button class="viewport-button" type="button" data-width="tablet" aria-label="Планшет">Планшет</button>
+            <button class="viewport-button" type="button" data-width="mobile" aria-label="Телефон">Телефон</button>
+          </div>
+        </div>
+        <div class="preview__stage" id="previewStage">
+          <iframe id="previewFrame" title="Предпросмотр экспортируемой страницы"></iframe>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <template id="sectionTemplate">
+    <article class="section-card">
+      <div class="section-card__header">
+        <span class="drag-handle" aria-hidden="true">••</span>
+        <input class="section-title-input" type="text" aria-label="Название раздела" placeholder="Название раздела">
+        <div class="item-actions">
+          <button class="icon-button move-up" type="button" title="Переместить выше" aria-label="Переместить раздел выше">↑</button>
+          <button class="icon-button move-down" type="button" title="Переместить ниже" aria-label="Переместить раздел ниже">↓</button>
+          <button class="icon-button delete-section" type="button" title="Удалить раздел" aria-label="Удалить раздел">×</button>
+        </div>
+      </div>
+      <div class="events-list"></div>
+      <button class="text-button add-event" type="button"><span aria-hidden="true">+</span> Добавить событие</button>
+    </article>
+  </template>
+
+  <template id="eventTemplate">
+    <article class="event-card">
+      <div class="event-card__summary">
+        <button class="event-card__toggle" type="button" aria-expanded="false">
+          <span class="event-card__number"></span>
+          <span class="event-card__name"></span>
+          <span class="chevron" aria-hidden="true"></span>
+        </button>
+        <div class="item-actions">
+          <button class="icon-button duplicate-event" type="button" title="Создать копию" aria-label="Создать копию события">⧉</button>
+          <button class="icon-button move-event-up" type="button" title="Переместить выше" aria-label="Переместить событие выше">↑</button>
+          <button class="icon-button move-event-down" type="button" title="Переместить ниже" aria-label="Переместить событие ниже">↓</button>
+          <button class="icon-button delete-event" type="button" title="Удалить" aria-label="Удалить событие">×</button>
+        </div>
+      </div>
+      <div class="event-card__body">
+        <div class="field">
+          <label>Название события</label>
+          <input class="event-title" type="text" placeholder="Название события">
+        </div>
+        <div class="field">
+          <label>Описание</label>
+          <textarea class="event-description" rows="6" placeholder="Описание события"></textarea>
+          <p class="field__hint">Для нескольких абзацев оставьте пустую строку.</p>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Ссылка кнопки</label>
+            <input class="event-url" type="url" placeholder="https://">
+          </div>
+          <div class="field field--small">
+            <label>Текст кнопки</label>
+            <input class="event-button-label" type="text" placeholder="Подробнее">
+          </div>
+        </div>
+        <div class="dates-editor">
+          <div class="dates-editor__header">
+            <div>
+              <label>Даты и время</label>
+              <p>Для диапазона оставьте время пустым.</p>
+            </div>
+            <select class="date-style" aria-label="Вид блока дат">
+              <option value="list">Отдельные даты</option>
+              <option value="range">Диапазон дат</option>
+            </select>
+            <button class="text-button add-date" type="button"><span aria-hidden="true">+</span> Добавить дату</button>
+          </div>
+          <div class="dates-list"></div>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <template id="dateTemplate">
+    <div class="date-row">
+      <span class="date-row__index"></span>
+      <div class="field">
+        <label>Дата или диапазон</label>
+        <input class="date-label" type="text" placeholder="21 ноября">
+      </div>
+      <div class="field">
+        <label>Время</label>
+        <input class="date-time" type="text" placeholder="14:00–15:30">
+      </div>
+      <button class="icon-button delete-date" type="button" aria-label="Удалить дату" title="Удалить дату">×</button>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
